@@ -6,7 +6,7 @@ See the LICENSE.md file in the root directory for more details.
 """
 
 
-from openpilot.selfdrive.ui.sunnypilot.mici.widgets.button import BigParamOption
+from openpilot.selfdrive.ui.sunnypilot.mici.widgets.button import BigParamControlSP, BigParamOption
 from openpilot.selfdrive.ui.sunnypilot.layouts.settings.display import ONROAD_BRIGHTNESS_TIMER_VALUES, OnroadBrightness
 from openpilot.selfdrive.ui.ui_state import ui_state
 from openpilot.system.ui.lib.multilang import tr
@@ -70,6 +70,16 @@ class DisplayLayoutMici(NavScroller):
       picker_unit="%",
       picker_item_width=140,
     )
+    self._disengaged_screen_off = BigParamControlSP(
+      tr("screen off when disengaged"), "DisengagedScreenOff",
+    )
+    self._disengaged_screen_off_timer = BigParamOption(
+      tr("disengaged screen off delay"), "DisengagedScreenOffTimer",
+      min_value=5, max_value=60, value_change_step=5,
+      label_callback=_timer_label,
+      picker_label_callback=_timer_picker_label,
+      picker_unit=_timer_picker_unit,
+    )
     self._brightness_timer = BigParamOption(
       tr("brightness delay"), "OnroadScreenOffTimer",
       min_value=0, max_value=15,
@@ -86,7 +96,10 @@ class DisplayLayoutMici(NavScroller):
       picker_unit=tr("seconds"),
     )
 
-    self._scroller.add_widgets([self._brightness, self._brightness_timer, self._ui_timeout])
+    self._scroller.add_widgets([
+      self._disengaged_screen_off, self._disengaged_screen_off_timer,
+      self._brightness, self._brightness_timer, self._ui_timeout,
+    ])
 
   def _update_state(self):
     super()._update_state()
@@ -95,6 +108,9 @@ class DisplayLayoutMici(NavScroller):
     self._ui_timeout.refresh()
 
     brightness_val = ui_state.params.get("OnroadScreenOffBrightness", return_default=True)
+    self._disengaged_screen_off_timer.set_enabled(ui_state.params.get_bool("DisengagedScreenOff"))
     self._brightness_timer.set_enabled(
       brightness_val not in (OnroadBrightness.AUTO, OnroadBrightness.AUTO_DARK)
     )
+    self._disengaged_screen_off.refresh()
+    self._disengaged_screen_off_timer.refresh()
