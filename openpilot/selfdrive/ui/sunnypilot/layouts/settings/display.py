@@ -79,12 +79,28 @@ class DisplayLayout(Widget):
                                     f"{value} s" if value < 60 else f"{int(value/60)} m"),
       inline=True
     )
+    self._screensaver_toggle = toggle_item_sp(
+      param="ScreenSaverEnabled",
+      title=lambda: tr("Screen Saver"),
+      description=lambda: tr("Show a screen saver when the device is offroad and idle, instead of turning the screen off."),
+    )
+    self._screensaver_timeout = option_item_sp(
+      param="ScreenSaverTimeout",
+      title=lambda: tr("Screen Saver Duration"),
+      description=lambda: tr("How long the screen saver runs before the screen turns off."),
+      min_value=60,
+      max_value=600,
+      value_change_step=60,
+      label_callback=lambda value: f"{int(value/60)} m"
+    )
     items = [
       self._disengaged_screen_off,
       self._disengaged_screen_off_timer,
       self._onroad_brightness,
       self._onroad_brightness_timer,
       self._interactivity_timeout,
+      self._screensaver_toggle,
+      self._screensaver_timeout,
     ]
     return items
 
@@ -110,6 +126,8 @@ class DisplayLayout(Widget):
 
     brightness_val = self._onroad_brightness.action_item.current_value
     self._onroad_brightness_timer.action_item.set_enabled(brightness_val not in (OnroadBrightness.AUTO, OnroadBrightness.AUTO_DARK))
+
+    self._screensaver_timeout.set_visible(self._screensaver_toggle.action_item.get_state())
 
   def _render(self, rect):
     self._scroller.render(rect)

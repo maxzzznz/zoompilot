@@ -102,7 +102,9 @@ class SteeringLayoutMici(NavScroller):
                                            list(ALC_LABELS.values()), values=list(ALC_LABELS))
     self._lc_bsm = BigParamControlSP(tr("bsm delay"), "AutoLaneChangeBsmDelay",
                                      depends_on=lambda: self._bsm_applies(self._alc_val) and self._car_has_bsm())
-    self._lc_view = self._lane_change_btn.link_sub_panel([self._lc_timer, self._lc_bsm])
+    # blocks lane changes toward a detected road edge — ungated, matching TICI lane_change_settings
+    self._lc_road_edge = BigParamControl(tr("road edge block"), "RoadEdgeLaneChangeEnabled")
+    self._lc_view = self._lane_change_btn.link_sub_panel([self._lc_timer, self._lc_bsm, self._lc_road_edge])
 
     # --- Blinker sub-panel ---
     self._blinker_toggle = BigParamControl(tr("enable blinker pause"), "BlinkerPauseLateralControl")
@@ -120,6 +122,12 @@ class SteeringLayoutMici(NavScroller):
     self._torque_toggle = BigParamControl(tr("enable torque control"), "EnforceTorqueControl")
     self._torque_toggle.set_enabled(lambda: self._torque_allowed and ui_state.is_offroad() and
                                     not ui_state.params.get_bool("NeuralNetworkLateralControl"))
+
+    # Mutually exclusive with NNLC; unlike the rest of this panel it works without
+    # EnforceTorqueControl on torque-native cars, so it is not gated on _enforce_torque
+    self._jerk_aware_toggle = BigParamControl(tr("jerk aware"), "LateralJerkTorqueController")
+    self._jerk_aware_toggle.set_enabled(lambda: ui_state.is_offroad() and
+                                        not ui_state.params.get_bool("NeuralNetworkLateralControl"))
 
     # Torque tune version selector — inline pill selector over the TICI TorqueControlTune options,
     # oldest first. No "default" option: the param's own default (0.0, v0) is what unset resolves to.
@@ -159,7 +167,7 @@ class SteeringLayoutMici(NavScroller):
     self._tq_items_rest = [self._tq_self_tune_btn, self._tq_custom_btn]
     for item in [self._tq_version] + self._tq_items_rest:
       item.set_enabled(lambda: self._enforce_torque)
-    self._tq_view = self._torque_settings_btn.link_sub_panel([self._torque_toggle, self._tq_version] + self._tq_items_rest)
+    self._tq_view = self._torque_settings_btn.link_sub_panel([self._torque_toggle, self._jerk_aware_toggle, self._tq_version] + self._tq_items_rest)
 
   # --- Torque tune version selector ---
   @staticmethod
@@ -192,6 +200,7 @@ class SteeringLayoutMici(NavScroller):
     if ui_state.CP is not None and not torque_allowed and self._prev_torque_allowed is not False:
       ui_state.params.remove("EnforceTorqueControl")
       ui_state.params.remove("NeuralNetworkLateralControl")
+      ui_state.params.remove("LateralJerkTorqueController")
     self._prev_torque_allowed = torque_allowed
 
     mads_on = ui_state.params.get_bool("Mads")
@@ -218,22 +227,26 @@ class SteeringLayoutMici(NavScroller):
     # Show BSM delay off where it does nothing, but leave the param alone — auto_lane_change
     # already ignores it below Nudgeless, and the user's choice comes back when they re-enable
     lc_bsm = _on_off(ui_state.params.get_bool("AutoLaneChangeBsmDelay") and self._bsm_applies(alc_val))
-    if alc_val <= AutoLaneChangeMode.OFF and lc_bsm == "off":
+    road_edge = _on_off(ui_state.params.get_bool("RoadEdgeLaneChangeEnabled"))
+    if alc_val <= AutoLaneChangeMode.OFF and lc_bsm == "off" and road_edge == "off":
       self._lane_change_btn.set_disabled()
     else:
       auto_badge = _alc_label(alc_val) if alc_val > AutoLaneChangeMode.OFF else "off"
-      self._lane_change_btn.set_badges([(tr("auto"), auto_badge), (tr("bsm-delay"), lc_bsm)])
+      self._lane_change_btn.set_badges([(tr("auto"), auto_badge), (tr("bsm-delay"), lc_bsm), (tr("road-edge"), road_edge)])
 
     enforce_torque = self._enforce_torque = ui_state.params.get_bool("EnforceTorqueControl")
+    jerk_aware = ui_state.params.get_bool("LateralJerkTorqueController")
     self_tune_on = ui_state.params.get_bool("LiveTorqueParamsToggle")
     custom_on = ui_state.params.get_bool("CustomTorqueParams")
 
     self._torque_settings_btn.set_enabled(torque_allowed)
-    if not enforce_torque:
+    if not enforce_torque and not jerk_aware:
       self._torque_settings_btn.set_disabled()
     else:
-      self._torque_settings_btn.set_badges([(tr("enabled"), "on"), (tr("self-tune"), _on_off(self_tune_on)), (tr("custom-tuning"), _on_off(custom_on))])
-    self._nnlc_toggle.set_enabled(torque_allowed and offroad and not enforce_torque)
+      # "off" badges are hidden by set_badges, so jerk-aware-only shows a single pill
+      self._torque_settings_btn.set_badges([(tr("enabled"), _on_off(enforce_torque)), (tr("jerk-aware"), _on_off(jerk_aware)),
+                                            (tr("self-tune"), _on_off(self_tune_on)), (tr("custom-tuning"), _on_off(custom_on))])
+    self._nnlc_toggle.set_enabled(torque_allowed and offroad and not enforce_torque and not jerk_aware)
 
     # --- Sub-panel state (sub-panels refresh themselves; this is transition cleanup + badges) ---
     self._update_mads_state()
@@ -243,7 +256,7 @@ class SteeringLayoutMici(NavScroller):
   def _update_mads_state(self):
     # Transition tracking — force safe defaults for MADS-limited brands (rivian, tesla w/o vehicle bus)
     is_mads_limited = self._mads_limited = bool(ui_state.CP is not None and ui_state.CP_SP is not None and
-                                                get_mads_limited_brands(ui_state.CP, ui_state.CP_SP))
+                                                get_mads_limited_brands(ui_state.CP, ui_state.CP_SP, ui_state.params))
     if is_mads_limited and self._prev_mads_limited is not True:
       ui_state.params.remove("MadsMainCruiseAllowed")
       ui_state.params.put_bool("MadsUnifiedEngagementMode", True)

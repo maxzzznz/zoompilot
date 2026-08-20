@@ -66,8 +66,8 @@ def scan_one(path):
       w = ev.which()
       if w == "carParams" and fingerprint is None:
         fingerprint = ev.carParams.carFingerprint
-      elif w == "liveTorqueParameters":
-        tp = ev.liveTorqueParameters
+      elif w == "lateralTorqueParameters":
+        tp = ev.lateralTorqueParameters
         centers = list(tp.speedBinCenters)
         if not centers:
           continue
@@ -79,7 +79,7 @@ def scan_one(path):
           "valid": list(tp.speedBinValid),
           "global_laf": float(tp.latAccelFactorFiltered),
           "global_friction": float(tp.frictionCoefficientFiltered),
-          "live_valid": bool(tp.liveValid),
+          "live_valid": bool(tp.valid),
         }
         pts = list(tp.speedBinPoints)
         if pts and any(len(p) for p in pts):
@@ -88,7 +88,7 @@ def scan_one(path):
     return {"path": str(path), "error": f"{type(e).__name__}: {e}"}
 
   if last_vals is None:
-    return {"path": str(path), "error": "no speed-binned liveTorqueParameters"}
+    return {"path": str(path), "error": "no speed-binned lateralTorqueParameters"}
   out = {"path": str(path), "fingerprint": fingerprint, "msgs": n_msgs, **last_vals}
   out["points"] = last_points if last_points else [0] * len(last_vals["centers"])
   out["has_points"] = last_points is not None
@@ -126,16 +126,16 @@ def depth_one(path, centers):
         cs_t.append(t)
         cs_v.append(ev.carState.vEgo)
         cs_ovr.append(1.0 if ev.carState.steeringPressed else 0.0)
-      elif w == "livePose":
+      elif w == "deviceMotion":
         pose_t.append(t)
-        pose_roll.append(ev.livePose.orientationNED.x)
+        pose_roll.append(ev.deviceMotion.orientationNED.x)
       elif w == "liveLocationKalman":
         llk_t.append(t)
         llk_yaw.append(ev.liveLocationKalman.angularVelocityCalibrated.value[2])
-      elif w == "liveDelay":
-        lag = ev.liveDelay.lateralDelay
-      elif w == "liveTorqueParameters":
-        tp = ev.liveTorqueParameters
+      elif w == "lateralDelay":
+        lag = ev.lateralDelay.lateralDelay
+      elif w == "lateralTorqueParameters":
+        tp = ev.lateralTorqueParameters
         if list(tp.speedBinCenters):
           msgs += 1
           for i, v in enumerate(list(tp.speedBinValid)[:n]):
@@ -234,7 +234,17 @@ def main():
       print("rejected on config change, so those logs predate the current speed_bp.")
     return
 
-  n_bins = len(seed_bp) if seed_bp else len(snaps[0]["centers"])
+  # no TOML entry yet (seeding a new car): work off the bin layout the logs learned on,
+  # and compare against the offline global values, which is what the learner seeds from
+  if not seed_bp:
+    seed_bp = list(snaps[0]["centers"])
+    with open(TOML_PATH.parent / "params.toml", "rb") as f:
+      offline = tomllib.load(f).get(args.car)
+    seed_laf = [offline[0] if offline else 0.0] * len(seed_bp)
+    seed_fric = [offline[2] if offline else 0.0] * len(seed_bp)
+    print(f"no TOML seeds for {args.car}; bin centers from the logs: {seed_bp}")
+    print(f"reference = offline globals (the unconfigured learner's seed): laf {seed_laf[0]:.2f}, friction {seed_fric[0]:.3f}")
+  n_bins = len(seed_bp)
   for s in snaps:
     s["n_valid"] = sum(1 for x in s["valid"] if x)
     s["total_points"] = sum(s["points"])
