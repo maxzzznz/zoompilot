@@ -48,14 +48,6 @@ def _seed_mazda_torque_defaults(CP: structs.CarParams, params: Params | None = N
   cloudlog.warning("Seeded steer-to-zero Mazda torque-control defaults (EnforceTorqueControl, self-tune, speed-dependent)")
 
 
-def _configure_mazda_metric_cruise_speed(CI: CarInterfaceBase, params: Params | None = None) -> None:
-  if params is None:
-    params = Params()
-
-  if CI.CP.brand == "mazda":
-    CI.CS.use_metric_cruise_speed = params.get_bool("IsMetric")
-
-
 def _enforce_torque_lateral_control(CP: structs.CarParams, params: Params | None = None, enabled: bool = False) -> bool:
   if params is None:
     params = Params()
@@ -131,7 +123,6 @@ def _cleanup_unsupported_params(CP: structs.CarParams, CP_SP: structs.CarParamsS
 
 def setup_interfaces(CI: CarInterfaceBase, params: Params | None = None) -> None:
   _seed_mazda_torque_defaults(CI.CP, params)
-  _configure_mazda_metric_cruise_speed(CI, params)
   enforce_torque = _enforce_torque_lateral_control(CI.CP, params)
   nnlc_enabled = _initialize_neural_network_lateral_control(CI.CP, CI.CP_SP, params)
   _initialize_intelligent_cruise_button_management(CI.CP, CI.CP_SP, params)
