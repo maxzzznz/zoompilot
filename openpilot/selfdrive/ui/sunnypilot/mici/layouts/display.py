@@ -96,9 +96,20 @@ class DisplayLayoutMici(NavScroller):
       picker_label_callback=_timer_picker_label,
       picker_unit=tr("minutes"),
     )
+    self._disengaged_screen_off = BigParamControl(
+      tr("screen off when disengaged"), "DisengagedScreenOff",
+    )
+    self._disengaged_screen_off_timer = BigParamOption(
+      tr("disengaged screen off delay"), "DisengagedScreenOffTimer",
+      min_value=5, max_value=60, value_change_step=5,
+      label_callback=_timer_label,
+      picker_label_callback=_timer_picker_label,
+      picker_unit=tr("seconds"),
+    )
 
     self._scroller.add_widgets([self._brightness, self._brightness_timer, self._ui_timeout,
-                                self._screensaver, self._screensaver_timeout])
+                                self._screensaver, self._screensaver_timeout,
+                                self._disengaged_screen_off, self._disengaged_screen_off_timer])
 
   def _update_state(self):
     super()._update_state()
@@ -107,6 +118,8 @@ class DisplayLayoutMici(NavScroller):
     self._ui_timeout.refresh()
     self._screensaver.refresh()
     self._screensaver_timeout.refresh()
+    self._disengaged_screen_off.refresh()
+    self._disengaged_screen_off_timer.refresh()
 
     brightness_val = ui_state.params.get("OnroadScreenOffBrightness", return_default=True)
     self._brightness_timer.set_enabled(
@@ -114,3 +127,4 @@ class DisplayLayoutMici(NavScroller):
     )
     # gated like the brightness timer above; the param keeps its value while the toggle is off
     self._screensaver_timeout.set_enabled(self._screensaver._checked)
+    self._disengaged_screen_off_timer.set_enabled(self._disengaged_screen_off._checked)

@@ -331,6 +331,76 @@ class TestDisplayScreenSaver:
     assert not layout._screensaver_timeout.enabled, "gate must follow the tap"
 
 
+class TestDisplayDisengagedScreenOff:
+  def test_timeout_is_last_and_gated_on_toggle(self, params):
+    from openpilot.selfdrive.ui.sunnypilot.mici.layouts.display import DisplayLayoutMici
+
+    params.put_bool("DisengagedScreenOff", False, block=True)
+    params.put("DisengagedScreenOffTimer", 10, block=True)
+    layout = DisplayLayoutMici()
+    layout._update_state()
+
+    assert layout._scroller.items[-2:] == [layout._disengaged_screen_off, layout._disengaged_screen_off_timer]
+    assert not layout._disengaged_screen_off_timer.enabled
+    assert params.get("DisengagedScreenOffTimer") == 10
+
+    params.put_bool("DisengagedScreenOff", True, block=True)
+    layout._update_state()
+    assert layout._disengaged_screen_off_timer.enabled
+    assert layout._disengaged_screen_off_timer.value == "10 seconds"
+
+  def test_timer_pauses_in_menus_and_restarts_on_return(self):
+    from openpilot.selfdrive.ui.sunnypilot.ui_state import UIStateSP
+    from openpilot.system.ui.lib.application import gui_app
+
+    class TimerState:
+      update_disengaged_screen_off_timer = UIStateSP.update_disengaged_screen_off_timer
+      reset_disengaged_screen_off_timer = UIStateSP.reset_disengaged_screen_off_timer
+
+    state = TimerState()
+    state.started = True
+    state.engaged = False
+    state.disengaged_screen_off = True
+    state.disengaged_screen_off_timer = -1
+    state.disengaged_screen_off_timer_param = 5
+
+    gui_app.set_menu_active(False)
+    state.update_disengaged_screen_off_timer()
+    assert state.disengaged_screen_off_timer == 5 * gui_app.target_fps
+
+    state.update_disengaged_screen_off_timer()
+    assert state.disengaged_screen_off_timer == 5 * gui_app.target_fps - 1
+
+    gui_app.set_menu_active(True)
+    state.update_disengaged_screen_off_timer()
+    assert state.disengaged_screen_off_timer == -1
+
+    gui_app.set_menu_active(False)
+    state.update_disengaged_screen_off_timer()
+    assert state.disengaged_screen_off_timer == 5 * gui_app.target_fps
+
+  def test_backlight_turns_off_only_when_timer_expires(self):
+    from openpilot.selfdrive.ui.sunnypilot.layouts.settings.display import OnroadBrightness
+    from openpilot.selfdrive.ui.sunnypilot.ui_state import DeviceSP
+
+    class BrightnessState:
+      started = True
+      disengaged_screen_off = True
+      disengaged_screen_off_timer = 0
+      onroad_brightness = OnroadBrightness.AUTO
+      onroad_brightness_timer = 0
+
+    state = BrightnessState()
+    assert DeviceSP.set_onroad_brightness(state, awake=True, cur_brightness=75.0) == 0.0
+
+    state.disengaged_screen_off_timer = 1
+    assert DeviceSP.set_onroad_brightness(state, awake=True, cur_brightness=75.0) == 75.0
+
+    state.disengaged_screen_off = False
+    state.disengaged_screen_off_timer = 0
+    assert DeviceSP.set_onroad_brightness(state, awake=True, cur_brightness=75.0) == 75.0
+
+
 class TestJerkAwareToggle:
   """LateralJerkTorqueController and NNLC are mutually exclusive (ui_state and the car interface
   both force-disable the pair); the layout must gate the toggles the same way or a tap on one

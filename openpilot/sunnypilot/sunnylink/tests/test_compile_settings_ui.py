@@ -151,6 +151,16 @@ class TestCompiledShape(OpenpilotTestCase):
           walk(x)
     walk(compiled)
 
+  def test_disengaged_screen_off_is_last_in_display(self, compiled, committed):
+    compiled_display = next(p for p in compiled["panels"] if p["id"] == "display")
+    committed_display = next(p for p in committed["panels"] if p["id"] == "display")
+    compiled_items = compiled_display["sections"][0]["items"]
+    committed_items = committed_display["sections"][0]["items"]
+    keys = ["DisengagedScreenOff", "DisengagedScreenOffTimer"]
+    assert [item["key"] for item in compiled_items[-2:]] == keys
+    assert [item["key"] for item in committed_items[-2:]] == keys
+    assert compiled_items[-2:] == committed_items[-2:]
+
 
 class TestSourceTreeIntegrity(OpenpilotTestCase):
   def test_macros_yaml_well_formed(self):

@@ -75,12 +75,32 @@ class DisplayLayout(Widget):
       value_change_step=60,
       label_callback=lambda value: f"{int(value/60)} m"
     )
+    self._disengaged_screen_off = toggle_item_sp(
+      param="DisengagedScreenOff",
+      title=lambda: tr("Screen Off When Disengaged"),
+      description=lambda: tr("Turn off the screen after the selected delay while driving disengaged. " +
+                             "The screen wakes when you engage, touch it, or a visual alert is shown."),
+      initial_state=False,
+    )
+    self._disengaged_screen_off_timer = option_item_sp(
+      param="DisengagedScreenOffTimer",
+      title=lambda: tr("Disengaged Screen Off Delay"),
+      description="",
+      min_value=0,
+      max_value=5,
+      value_change_step=1,
+      value_map={0: 3, 1: 5, 2: 10, 3: 15, 4: 30, 5: 60},
+      label_callback=lambda value: f"{value} s" if value < 60 else f"{int(value/60)} m",
+      inline=True,
+    )
     items = [
       self._onroad_brightness,
       self._onroad_brightness_timer,
       self._interactivity_timeout,
       self._screensaver_toggle,
       self._screensaver_timeout,
+      self._disengaged_screen_off,
+      self._disengaged_screen_off_timer,
     ]
     return items
 
@@ -104,6 +124,9 @@ class DisplayLayout(Widget):
     self._onroad_brightness_timer.action_item.set_enabled(brightness_val not in (OnroadBrightness.AUTO, OnroadBrightness.AUTO_DARK))
 
     self._screensaver_timeout.set_visible(self._screensaver_toggle.action_item.get_state())
+    self._disengaged_screen_off_timer.action_item.set_enabled(
+      self._disengaged_screen_off.action_item.get_state()
+    )
 
   def _render(self, rect):
     self._scroller.render(rect)
